@@ -9,7 +9,7 @@ table.add_player(strategy=DontCome2xOdds(dont_come_amount=5), bankroll=300, name
 table.add_player(strategy=DontCome3xOdds(dont_come_amount=5), bankroll=300, name="Todd 3X")
 table.add_player(strategy=DontComeVariableOdds(dont_come_amount=5), bankroll=300, name="Todd 1X 2X 3X")
 
-table.run(max_rolls=120, verbose=True)
+table.run(max_rolls=150, verbose=False)
 
 print("\nFINAL RESULTS")
 for p in table.players:
