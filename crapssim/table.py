@@ -211,7 +211,7 @@ class Table:
             If True prints a welcome message and the initial players.
         """
         if verbose and self.dice.n_rolls == 0:
-            print("Welcome to the Craps Table!")
+            print("\n\n----- Welcome to the Craps Table! -----")
         self.ensure_one_player()
         if verbose and self.dice.n_rolls == 0:
             for player in self.players:
