@@ -549,9 +549,12 @@ class Odds(_WinningLosingNumbersBet):
         return issubclass(self.base_type, (DontPass, DontCome))
 
     def get_result(self, table: Table) -> BetResult:
-
+        # Don't Come Odds stay working during the come out roll
+        if issubclass(self.base_type, DontCome):
+            return super().get_result(table)
+            
+        # For other bets (Come, Pass, Don't Pass), odds are off unless always_working is True
         if table.point.status == "Off" and not self.always_working:
-
             if table.dice.total in (
                 self.get_losing_numbers(table) + self.get_winning_numbers(table)
             ):
