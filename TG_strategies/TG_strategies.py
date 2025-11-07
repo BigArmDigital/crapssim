@@ -34,7 +34,7 @@ class DontCome1xOdds(AggregateStrategy):
     def __init__(
         self, dont_come_amount: float
     ) -> None:
-        """Place a Don't Come bet with 2x odds.
+        """Place a Don't Come bet with 1x odds.
 
         Parameters
         ----------
@@ -50,6 +50,70 @@ class DontCome1xOdds(AggregateStrategy):
             OddsMultiplier(DontCome, 1),
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"dont_come_amount={self.dont_come_amount})"
+        )
+
+
+class DontCome1xOddsNextPoint(AggregateStrategy):
+    """Strategy that adds a DontCome bet only when a point is newly established, and adds 1x Odds to the DontCome bet.
+    After the Don't Come bet loses, waits for the next point to be established before placing another bet."""
+
+    def __init__(
+        self, dont_come_amount: float
+    ) -> None:
+        """Place a Don't Come bet with 1x odds.
+
+        Parameters
+        ----------
+        dont_come_amount
+            The amount of the DontCome bet.
+        """
+        self.dont_come_amount = float(dont_come_amount)
+        self.prev_point_status = "Off"
+        self.prev_roll = None
+        self.waiting_for_point = False  # True when we need to wait for next point after a 7
+        super().__init__(
+            AddIfTrue(
+                DontCome(dont_come_amount),
+                lambda p: self.should_place_bet(p)
+            ),
+            OddsMultiplier(DontCome, 1),
+        )
+
+    def should_place_bet(self, player: Player) -> bool:
+        """Determine if we should place a new Don't Come bet."""
+        # No new bets if we already have one
+        if len(player.get_bets_by_type((DontCome,))) > 0:
+            return False
+            
+        # We only place bets when a point is newly established
+        point_newly_established = (player.table.point.status == "On" and 
+                                 self.prev_point_status == "Off")
+            
+        # After a 7 is rolled, wait for the next point to be established
+        if player.table.dice.total == 7:
+            self.waiting_for_point = True
+            
+        # Once a new point is established after a 7, we can bet again
+        if point_newly_established:
+            self.waiting_for_point = False
+            
+        return point_newly_established and not self.waiting_for_point
+
+    def update_bets(self, player: Player) -> None:
+        """Update bets and track state changes."""
+        # Save current state
+        self.prev_roll = player.table.dice.total if player.table.dice else None
+        current_status = player.table.point.status
+        
+        # Update bets
+        super().update_bets(player)
+        
+        # Save state for next time
+        self.prev_point_status = current_status
+        
     def __repr__(self) -> str:
         return (
             f"dont_come_amount={self.dont_come_amount})"
