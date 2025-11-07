@@ -71,9 +71,10 @@ class DontCome1xOddsNextPoint(AggregateStrategy):
             The amount of the DontCome bet.
         """
         self.dont_come_amount = float(dont_come_amount)
-        self.prev_point_status = "Off"
-        self.prev_roll = None
-        self.waiting_for_point = False  # True when we need to wait for next point after a 7
+        self.current_point_status = "Off"  # Current point status
+        self.current_point_number = None   # Current point number
+        self.waiting_for_resolution = False  # True when waiting for current point to resolve
+        self.initial_point = True  # True for the first point only
         super().__init__(
             AddIfTrue(
                 DontCome(dont_come_amount),
@@ -84,35 +85,81 @@ class DontCome1xOddsNextPoint(AggregateStrategy):
 
     def should_place_bet(self, player: Player) -> bool:
         """Determine if we should place a new Don't Come bet."""
+        print(f"[DEBUG] === starting should_place_bet ===")
+        # Get current point info
+        current_number = player.table.point.number if player.table.point.status == "On" else None
+        
         # No new bets if we already have one
         if len(player.get_bets_by_type((DontCome,))) > 0:
+            print(f"[DEBUG] Already have a Don't Come bet - not placing new bet")
+            print(f"[DEBUG] === end should_place_bet already have a dontcome bet ===")
             return False
             
-        # We only place bets when a point is newly established
-        point_newly_established = (player.table.point.status == "On" and 
-                                 self.prev_point_status == "Off")
+        # Point must be ON to place a Don't Come bet
+        if player.table.point.status != "On":
+            print(f"[DEBUG] Point is Off - not placing new bet")
+            print(f"[DEBUG] === end should_place_bet player.table.point.status On ===")
+            return False
             
-        # After a 7 is rolled, wait for the next point to be established
-        if player.table.dice.total == 7:
-            self.waiting_for_point = True
+        # After losing a bet, we must wait for current point to resolve
+        if self.waiting_for_resolution:
+            print(f"[DEBUG] Waiting for current point {current_number} to resolve")
+            print(f"[DEBUG] === end should_place_bet self.waiting_for_resolution ===")
+            return False
+        
+        # Only place bet on the initial point or after a point resolves
+        if self.initial_point and player.table.point.status == "On":
+            print(f"[DEBUG] Initial point {current_number} established - placing new bet")
+            self.initial_point = False
+            print(f"[DEBUG] === end should_place_bet self.initial_point and player.table.point.status On ===")
+            return True
             
-        # Once a new point is established after a 7, we can bet again
+        # For subsequent bets, require point to be newly established
+        point_newly_established = (player.table.point.status == "On" and
+                                self.current_point_status == "Off")
+        print(f"[DEBUG] point_newly_established: {point_newly_established}  because  player.table.point.status: {player.table.point.status}  and  self.current_point_status: {self.current_point_status}")                                
         if point_newly_established:
-            self.waiting_for_point = False
+            print(f"[DEBUG] New point {current_number} established - placing new bet")
+            print(f"[DEBUG] === end should_place_bet point_newly_established TRUE ===")
+            return True
             
-        return point_newly_established and not self.waiting_for_point
+        print(f"[DEBUG] === end should_place_bet No conditions met for placing new bet (current point {current_number})")
+        return False
+    
 
     def update_bets(self, player: Player) -> None:
         """Update bets and track state changes."""
-        # Save current state
-        self.prev_roll = player.table.dice.total if player.table.dice else None
-        current_status = player.table.point.status
+               # Get current point info for this update
+        current_point_status = player.table.point.status
+        current_point_number = player.table.point.number if player.table.point.status == "On" else None
+
+        # Print current state
+        print(f"[DEBUG] --- Start of update_bets ---")
+        print(f"[DEBUG] Current roll: {player.table.dice.total if player.table.dice else None}")
+        print(f"[DEBUG] Point status: {current_point_status} (prev: {self.current_point_status})")
+        print(f"[DEBUG] Point number: {current_point_number} (prev: {self.current_point_number})")
+        print(f"[DEBUG] Current state: waiting_for_resolution={self.waiting_for_resolution}")
         
-        # Update bets
+        # Check for lost bets BEFORE any updates
+        had_dont_come = len(player.get_bets_by_type((DontCome,))) > 0
+        
+        # Immediately check if we lost our Don't Come bet by checking current bets
+        # This ensures waiting_for_resolution is set before any new bets are considered
+        if had_dont_come:
+            current_dont_come_bets = player.get_bets_by_type((DontCome,))
+            if len(current_dont_come_bets) == 0:  # We lost the bet
+                print(f"[DEBUG] Lost Don't Come bet - waiting for point {current_point_number} to resolve")
+                self.waiting_for_resolution = True
+                self.initial_point = False
+        
+        # Update our state after checking for losses but before processing new bets
+        self.current_point_status = current_point_status
+        self.current_point_number = current_point_number
+        
+        # Now process any new bets
         super().update_bets(player)
-        
-        # Save state for next time
-        self.prev_point_status = current_status
+        print(f"[DEBUG] End state: waiting_for_resolution={self.waiting_for_resolution}, point={self.current_point_number}")
+        print(f"[DEBUG] --- End of update_bets ---")
         
     def __repr__(self) -> str:
         return (
